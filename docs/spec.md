@@ -250,3 +250,16 @@ function price_tree_american(product, model, market, settings):
 
 ## Minimal working skeleton
 See `pricing_engine/` package for module stubs and interfaces.
+
+## Implementation status (current)
+- Pricing API, product/model/engine abstractions, and market data snapshots are implemented in Python.
+- Analytic, tree, and Monte Carlo engines cover core vanilla and select exotic payoffs.
+- Greeks support analytic (European BS) and bump-and-reprice paths.
+- Risk workflows and a static volatility surface demo are available under `market_risk/` and `surface_app/`.
+
+## PM follow-ups / next goals
+- Define MVP product coverage by desk priority (vanilla + barrier + Asian first) and lock acceptance criteria.
+- Specify deterministic-mode expectations for each engine (MC, PDE, tree) and required audit fields.
+- Confirm calibration scope (Heston, local vol, LSV) and required quote inputs per model.
+- Align cache strategy (market snapshot versioning + pricing run cache keys) with audit requirements.
+- Provide performance targets by product family and acceptable error tolerances for regression tests.
