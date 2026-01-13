@@ -20,6 +20,10 @@ Configuration
 - Set `max_rounds` to 0 (or less) for unlimited rounds; use `--max-rounds` to cap.
 - The default `command_template` uses `python agents/run_codex_agent.py` as a wrapper.
 - The wrapper normalizes agent output to JSON; invalid output is wrapped with an error payload.
+- `capture_git` saves `git status` and `git diff` snapshots per round.
+- `validate_outputs` enforces per-role JSON structure.
+- `enforce_implementer_changes` fails the run if the Implementer makes no repo changes.
+- Git snapshots are written to `agents/runs/<run_id>/round_<n>/git_*`.
 - `command_template` can be set in `agents/pipeline.json` or via
   `AGENT_CMD_TEMPLATE` env var. The env var takes precedence.
 - Template variables supported: `{agent_file}`, `{agent}`, `{input_file}`,

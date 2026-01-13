@@ -1,6 +1,9 @@
 {
   "max_rounds": 0,
   "command_template": "python agents/run_codex_agent.py --agent-file {agent_file} --input {input_file} --output {output_file} --role {agent}",
+  "capture_git": true,
+  "validate_outputs": true,
+  "enforce_implementer_changes": true,
   "status_keys": ["status", "decision", "result"],
   "pass_values": ["pass", "approved", "yes", "true"],
   "agents": [

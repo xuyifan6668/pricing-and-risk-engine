@@ -53,6 +53,39 @@ SKELETONS: dict[str, dict[str, Any]] = {
     },
 }
 
+ROLE_SCHEMAS: dict[str, dict[str, type]] = {
+    "planner": {
+        "plan": list,
+        "improvements": list,
+        "acceptance_criteria": list,
+        "risks": list,
+        "questions": list,
+    },
+    "implementer": {
+        "changes": list,
+        "tests_needed": list,
+        "notes": list,
+        "open_questions": list,
+    },
+    "tester": {
+        "tests_run": list,
+        "new_tests": list,
+        "failures": list,
+        "notes": list,
+    },
+    "reviewer": {
+        "findings": list,
+        "approval": str,
+        "notes": list,
+    },
+    "manager": {
+        "status": str,
+        "summary": str,
+        "reasons": list,
+        "next_steps": list,
+    },
+}
+
 
 def _slugify(text: str) -> str:
     slug = re.sub(r"[^a-zA-Z0-9]+", "-", text.strip().lower()).strip("-")
@@ -98,6 +131,80 @@ def _resolve_template(config: dict[str, Any], explicit: str | None) -> str | Non
         return None
     template = template.strip()
     return template or None
+
+
+def _run_git(repo_root: Path, args: list[str]) -> str:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout
+
+
+def _git_available(repo_root: Path) -> bool:
+    try:
+        subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return True
+    except FileNotFoundError:
+        return False
+    except subprocess.CalledProcessError:
+        return False
+
+
+def _capture_git_state(round_dir: Path, repo_root: Path, label: str) -> None:
+    try:
+        status = _run_git(repo_root, ["status", "-sb"])
+        porcelain = _run_git(repo_root, ["status", "--porcelain", "-uall"])
+        diff = _run_git(repo_root, ["diff"])
+        diff_cached = _run_git(repo_root, ["diff", "--cached"])
+        diff_stat = _run_git(repo_root, ["diff", "--stat"])
+    except Exception as exc:
+        print(f"Warning: failed to capture git state ({label}): {exc}", file=sys.stderr)
+        return
+
+    (round_dir / f"git_{label}_status.txt").write_text(status, encoding="utf-8")
+    (round_dir / f"git_{label}_status_porcelain.txt").write_text(porcelain, encoding="utf-8")
+    (round_dir / f"git_{label}_diff.patch").write_text(diff, encoding="utf-8")
+    (round_dir / f"git_{label}_diff_cached.patch").write_text(diff_cached, encoding="utf-8")
+    (round_dir / f"git_{label}_diff_stat.txt").write_text(diff_stat, encoding="utf-8")
+
+
+def _validate_list_of_dicts(role: str, key: str, values: Any, required_keys: list[str]) -> None:
+    if not isinstance(values, list):
+        raise ValueError(f"{role} output '{key}' must be a list.")
+    for idx, item in enumerate(values):
+        if not isinstance(item, dict):
+            raise ValueError(f"{role} output '{key}[{idx}]' must be an object.")
+        for required in required_keys:
+            if required not in item:
+                raise ValueError(f"{role} output '{key}[{idx}]' missing '{required}'.")
+
+
+def _validate_payload(role: str, payload: dict[str, Any]) -> None:
+    schema = ROLE_SCHEMAS.get(role)
+    if not schema:
+        return
+    for key, expected in schema.items():
+        if key not in payload:
+            raise ValueError(f"{role} output missing required key '{key}'.")
+        if not isinstance(payload[key], expected):
+            raise ValueError(f"{role} output '{key}' must be {expected.__name__}.")
+
+    if role == "implementer":
+        _validate_list_of_dicts(role, "changes", payload["changes"], ["file", "summary"])
+    elif role == "tester":
+        _validate_list_of_dicts(role, "tests_run", payload["tests_run"], ["command", "status", "details"])
+    elif role == "reviewer":
+        _validate_list_of_dicts(role, "findings", payload["findings"], ["severity", "file", "detail"])
 
 
 def _build_agent_specs(config: dict[str, Any], repo_root: Path) -> list[AgentSpec]:
@@ -172,6 +279,11 @@ def run_pipeline(goal: str, config_path: Path, max_rounds: int | None, manual: b
 
     max_rounds_raw = config.get("max_rounds", 1)
     max_rounds = int(max_rounds_raw) if max_rounds_raw is not None else None
+    capture_git = bool(config.get("capture_git", True))
+    validate_outputs = bool(config.get("validate_outputs", True))
+    enforce_implementer_changes = bool(config.get("enforce_implementer_changes", True))
+    git_enabled = capture_git or enforce_implementer_changes
+    git_available = _git_available(repo_root) if git_enabled else False
     status_keys = list(config.get("status_keys", ["status"]))
     pass_values = list(config.get("pass_values", ["pass"]))
 
@@ -181,6 +293,9 @@ def run_pipeline(goal: str, config_path: Path, max_rounds: int | None, manual: b
         round_dir = run_dir / f"round_{round_idx}"
         round_dir.mkdir(parents=True, exist_ok=True)
 
+        if capture_git and git_available:
+            _capture_git_state(round_dir, repo_root, "pre")
+
         round_outputs: dict[str, Any] = {}
         past_rounds_summary = [
             {"round": past["round"], "manager": past.get("outputs", {}).get("manager")}
@@ -188,6 +303,18 @@ def run_pipeline(goal: str, config_path: Path, max_rounds: int | None, manual: b
         ]
 
         for agent in agents:
+            pre_implementer_status = None
+            if (
+                agent.name == "implementer"
+                and enforce_implementer_changes
+                and git_available
+            ):
+                try:
+                    pre_implementer_status = _run_git(repo_root, ["status", "--porcelain", "-uall"])
+                except Exception as exc:
+                    print(f"Warning: failed to read git status: {exc}", file=sys.stderr)
+                    pre_implementer_status = None
+
             input_path = round_dir / f"{agent.name}_input.json"
             output_path = round_dir / f"{agent.name}_output.json"
 
@@ -210,10 +337,31 @@ def run_pipeline(goal: str, config_path: Path, max_rounds: int | None, manual: b
                 _run_agent_command(template, agent, input_path, output_path, round_idx, repo_root)
 
             output_payload = _read_output(output_path)
+            if validate_outputs:
+                _validate_payload(agent.name, output_payload)
             round_outputs[agent.name] = output_payload
+
+            if (
+                agent.name == "implementer"
+                and enforce_implementer_changes
+                and git_available
+                and pre_implementer_status is not None
+            ):
+                try:
+                    post_status = _run_git(repo_root, ["status", "--porcelain", "-uall"])
+                except Exception as exc:
+                    print(f"Warning: failed to read git status: {exc}", file=sys.stderr)
+                else:
+                    if post_status == pre_implementer_status:
+                        raise ValueError(
+                            "Implementer made no repo changes; edit files or disable enforce_implementer_changes."
+                        )
 
         run_state["rounds"].append({"round": round_idx, "outputs": round_outputs})
         _write_json(run_dir / "summary.json", run_state)
+
+        if capture_git and git_available:
+            _capture_git_state(round_dir, repo_root, "post")
 
         manager_payload = round_outputs.get("manager", {})
         if _manager_passed(manager_payload, status_keys, pass_values):

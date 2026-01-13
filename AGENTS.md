@@ -12,6 +12,7 @@ Quick start:
 - The default config runs without a round limit; use `--max-rounds` to cap.
 - The default command template uses `python agents/run_codex_agent.py`; override it if needed.
 - The wrapper normalizes agent output to JSON and warns on invalid output.
+- Git snapshots and output validation are enabled by default (see `agents/pipeline.json`).
 
 Example:
 ```
