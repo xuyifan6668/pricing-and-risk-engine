@@ -1,5 +1,0 @@
- AGENTS.md              |   1 +
- agents/README.md       |   4 ++
- agents/pipeline.json   |   3 +
- agents/run_pipeline.py | 148 +++++++++++++++++++++++++++++++++++++++++++++++++
- 4 files changed, 156 insertions(+)

@@ -10,6 +10,9 @@ Roles
 - reviewer: review diffs and risks
 - manager: decide pass/fail and next steps
 
+Round scope
+- Each round targets 1-2 deliverables; if a round fails, the next Planner/Reviewer focus on fixing those issues before expanding scope.
+
 Runner
 ```
 python agents/run_pipeline.py --goal "<your request>"

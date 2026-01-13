@@ -13,6 +13,7 @@ Quick start:
 - The default command template uses `python agents/run_codex_agent.py`; override it if needed.
 - The wrapper normalizes agent output to JSON and warns on invalid output.
 - Git snapshots and output validation are enabled by default (see `agents/pipeline.json`).
+- Each round should target 1-2 deliverables; if a round fails, focus the next round on fixing those issues.
 
 Example:
 ```
