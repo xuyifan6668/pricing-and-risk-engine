@@ -264,48 +264,19 @@ See `pricing_engine/` package for module stubs and interfaces.
 - Align cache strategy (market snapshot versioning + pricing run cache keys) with audit requirements.
 - Provide performance targets by product family and acceptable error tolerances for regression tests.
 
-## PM plan: goals, success metrics, personas, and roadmap improvements
-
-### Product goals (12-month target state)
-- Deliver a comprehensive equity risk and pricing engine that is audit-ready, reproducible, and supports the full vanilla-to-exotics workflow for front office and risk users.
-- Provide deterministic, explainable pricing and Greeks across analytic, PDE/tree, and MC engines with consistent market data snapshots.
-- Reduce time-to-price for common workflows (vanilla, barrier, Asian, vol/variance swaps) and improve model calibration stability.
-- Enable scalable batch risk (10k+ options/sec) with clear performance SLAs and cost controls.
-
-### Success metrics
-- Pricing accuracy: within desk tolerance vs. vendor for core products (e.g., ≤1bp for vanilla IVs, ≤0.5% PV for exotics).
-- Performance: median latency targets achieved (analytic <5ms, PDE/tree <50ms, MC <200ms) on reference hardware.
-- Calibration stability: >95% of daily calibrations converge without manual intervention; no-arb checks pass >98% of the time.
-- Risk coverage: 90%+ of daily risk run volume covered by deterministic mode with reproducible results.
-- Adoption: at least two desk workflows migrated and used daily with a measurable reduction in manual overrides.
-
-### User personas and workflow value
-- **Front-office quant**: needs rapid model iteration, calibration diagnostics, and validation tooling.
-  - Value: faster prototyping, parameter stability insights, and consistent pricing outputs.
-- **Trader/structurer**: needs real-time pricing, scenario risk, and explainable Greeks.
-  - Value: responsive pricing with clear audit trails and quick sensitivity turnaround.
-- **Risk manager**: needs batch risk and reproducibility for governance and stress testing.
-  - Value: deterministic mode, market snapshot versioning, and transparent audit metadata.
-- **Operations/IT**: needs reliability, monitoring, and deployment simplicity.
-  - Value: defined SLAs, observability, and clear rollback/fallback strategies.
-
-### Documentation and onboarding improvements
-- Add a "Getting Started" guide that walks through a full pricing workflow (market snapshot → calibration → pricing → Greeks → audit record).
-- Provide a sample market data bundle and tutorial notebook for common products (vanilla, barrier, Asian).
-- Document engine selection guidance (analytic vs. PDE/tree vs. MC) with performance/accuracy trade-offs.
-- Add a governance checklist for model sign-off (calibration inputs, diagnostics, no-arb checks, deterministic settings).
-- Create an onboarding checklist for new users (local setup, tests, sample runs, and troubleshooting).
-
-### Roadmap (prioritized)
-1. **MVP coverage and acceptance criteria**: lock product list, input data, and error tolerances for vanilla/barrier/Asian.
-2. **Deterministic mode standardization**: define seeds, grids, and audit schema across engines.
-3. **Calibration hardening**: add stability diagnostics, no-arb reporting, and caching by snapshot/version.
-4. **Risk workflow scale-out**: batch pricing, scenario grids, and AAD for MC and PDE.
-5. **Documentation + onboarding**: ship tutorial datasets, examples, and governance guide.
-
-### Open questions
-- Which products are mandatory for initial production release vs. phase 2?
-- What vendor benchmarks or internal golden prices define acceptance thresholds?
-- Which regulatory audit fields are required for each pricing run?
-- What hardware baseline should define the latency/throughput SLAs?
-- How should model fallback be communicated and approved in production workflows?
+## PM summary (roadmap + plan)
+- **Phase 0: Definition & governance**
+  - Finalize MVP product list and acceptance criteria with trading/risk stakeholders.
+  - Lock deterministic-mode expectations (seed rules, audit metadata, reproducibility).
+  - Define calibration coverage and data dependencies per model family.
+- **Phase 1: Core pricing readiness**
+  - Harden analytic + tree pricing for vanilla and barrier products.
+  - Confirm Monte Carlo determinism requirements and add regression baselines.
+  - Establish market snapshot versioning + pricing cache keys for audit trails.
+- **Phase 2: Calibration & risk integration**
+  - Implement/extend calibration services with persistence + diagnostics.
+  - Define benchmark suites (vendor parity, convergence, regression outputs).
+  - Integrate risk sensitivities and scenario workflows with pricing outputs.
+- **Phase 3: Performance & productionization**
+  - Set latency/throughput SLOs by product family and validate.
+  - Add monitoring/audit dashboards and release governance gates.

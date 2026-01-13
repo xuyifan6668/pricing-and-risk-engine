@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Hashable
+from dataclasses import asdict, dataclass, is_dataclass
+from typing import Hashable, Iterable
 
 from pricing_engine.api import PricingResult, price
 from pricing_engine.market_data.snapshot import MarketDataSnapshot
@@ -12,6 +12,22 @@ from pricing_engine.numerics.base import Engine
 from pricing_engine.products.base import Product
 from pricing_engine.services.cache import CacheEntry, SimpleCache
 from pricing_engine.api import PricingSettings
+
+
+def _freeze(value: object) -> Hashable:
+    if isinstance(value, dict):
+        return tuple(sorted((k, _freeze(v)) for k, v in value.items()))
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(v) for v in value)
+    if isinstance(value, set):
+        return tuple(sorted(_freeze(v) for v in value))
+    return value
+
+
+def _dataclass_payload(obj: object) -> Hashable:
+    if is_dataclass(obj):
+        return _freeze(asdict(obj))
+    return _freeze(obj)
 
 
 @dataclass
@@ -26,13 +42,27 @@ class PricingService:
         engine: Engine,
         settings: PricingSettings,
     ) -> Hashable:
+        product_payload = (
+            _dataclass_payload(product)
+            if is_dataclass(product)
+            else (product.product_type, _freeze(product.metadata()))
+        )
+        greek_payload: Iterable[object] | None
+        if settings.greek_request is None:
+            greek_payload = None
+        else:
+            greek_payload = _dataclass_payload(settings.greek_request)
+        engine_settings_payload = _dataclass_payload(settings.engine_settings)
         return (
             product.product_type,
-            product.maturity,
             model.name,
+            _freeze(model.params()),
             engine.name,
             market.snapshot_id,
-            settings.engine_settings.deterministic,
+            engine_settings_payload,
+            settings.compute_greeks,
+            greek_payload,
+            product_payload,
         )
 
     def price(
