@@ -18,7 +18,7 @@ from market_risk.mock_data import (
     build_mock_portfolio,
     generate_market_history,
 )
-from market_risk.reporting import RunLogger
+from market_risk.reporting import RunLogger, SCHEMA_VERSION, build_report_meta
 
 
 def main() -> None:
@@ -94,7 +94,26 @@ def main() -> None:
     runner = GridCheckRunner(portfolio, base_market)
     result = runner.run(config)
 
-    json_path, html_path = write_report(result, config)
+    run_id = build_run_id()
+    report_inputs = {
+        "fast": args.fast,
+        "history_days": len(history),
+        "portfolio_positions": len(portfolio.positions),
+        "config": config.__dict__,
+    }
+    meta = build_report_meta(
+        report_type="risk.grid_checks",
+        run_id=run_id,
+        asof=result.summary.asof,
+        inputs=report_inputs,
+        generator="market_risk/run_grid_checks.py",
+        engine="GridCheckRunner",
+        assumptions=(
+            "Grid checks use the mock portfolio and synthetic market history.",
+            "Interpolation errors are relative to full reprice across shifts.",
+        ),
+    )
+    json_path, html_path = write_report(result, config, meta=meta)
 
     print("=== Grid Sensitivity Check ===")
     print(f"Date: {result.summary.asof}")
@@ -132,9 +151,11 @@ def main() -> None:
     log_path = logger.log_run(
         name="grid_checks",
         asof=result.summary.asof,
-        params={"fast": args.fast, "config": config.__dict__, "summary": result.summary.__dict__},
+        params=report_inputs,
         outputs={"json_report": json_path, "html_report": html_path},
         notes="daily grid sensitivity checks",
+        version=SCHEMA_VERSION,
+        run_id=run_id,
     )
     print(f"Run log: {log_path}")
 
@@ -165,6 +186,12 @@ def history_start() -> "date":
     from datetime import date
 
     return date(2023, 1, 2)
+
+
+def build_run_id() -> str:
+    from uuid import uuid4
+
+    return str(uuid4())
 
 
 if __name__ == "__main__":

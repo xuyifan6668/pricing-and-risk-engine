@@ -1,311 +1,79 @@
-# Equity & Equity Derivatives Pricing Engine - Technical Specification
+# Technical Specification
 
-## Goals and scope
-Build an industry-grade pricing engine for equity and equity derivatives (vanilla and exotics) with robust calibration, fast pricing, complete risk, and auditable model governance. The system supports multiple model families, multiple numerical methods, and consistent market data handling (curves, dividends, calendars, and corporate actions).
+This document summarizes the current architecture, product/model coverage, and
+engine compatibility for the pricing and market risk workflows.
 
-Key requirements:
-- Coverage: spot, forwards, swaps, European/American options; barriers, digitals, Asians (avg price/strike), lookbacks, cliquets, corridors, variance/vol swaps, and optional add-ons (e.g., convertibles via equity optionality components).
-- Models: Black-Scholes, local vol, Heston, Merton jump diffusion, hybrid local-stoch.
-- Methods: analytic closed forms, PDE/FD, Monte Carlo (QMC), trees; AAD support for Greeks.
-- Market data: OIS discounting, equity funding curve, borrow costs; discrete/continuous dividends; corporate actions.
-- Engineering: scalable services, reproducible pricing, audit trails, and robust diagnostics.
+## Scope
+- Equity derivatives pricing for single-underlying products.
+- Market risk workflow with historical VaR/ES, RTPL, and PLA diagnostics.
+- Lightweight calibration scaffolding and reporting artifacts.
 
-## Architecture diagram (text)
-```
-[Market Data Feed] ---> [Ingestion + Normalization] ---> [Market Data Cache]
-                               |                             |
-                               v                             v
-                        [Corporate Actions]            [Curves + Surfaces]
-                               |                             |
-                               v                             v
-[Pricing API] <--> [Product Registry] <--> [Model Registry] <--> [Calibration Service]
-      |                     |                       |                 |
-      v                     v                       v                 v
-[Pricing Service] ---> [Pricers/Engines] <--> [Numerical Backends] ---> [Results + Audit]
-      |                                                         |
-      v                                                         v
-[Greeks/Risk] <---------------------------------------- [Diagnostics + Logs]
-```
+## Architecture overview
+- `pricing_engine/`: pricing models, products, numerics, calibration, and reporting.
+- `market_risk/`: scenario generation, RTPL/PLA analytics, grid sensitivities, reports.
+- `surface_app/`: static volatility surface calibration demo UI.
 
-## Major design choices (with justification)
-- **Separation of concerns (Product/Model/Engine)**: Products encode payoffs, models encode dynamics, engines encode numerics. This allows mixing products and models while swapping numerical methods without changing product code.
-- **Market data as immutable snapshot**: A pricing run consumes a versioned market snapshot to ensure reproducibility and audit trails.
-- **Unified curve abstractions**: Curves (OIS, funding, borrow) and dividend term structures share interfaces to simplify scenario risk and cross-Greeks.
-- **Calibration as a service**: Decoupling calibration from pricing allows caching and reusing calibrated parameters, consistent with how desks operate.
-- **Multiple numerics**: Closed-form when available for speed and deterministic outputs; PDE/trees for early exercise and barriers; MC/QMC for path-dependent exotics.
-- **Diagnostic-rich outputs**: Pricing outputs include metadata (model version, calibration fitness, numerical settings) for audit and stability checks.
+Key workflow
+1. Build `MarketDataSnapshot` inputs (spot, curves, vol surface, dividends).
+2. Price products with `Engine` + `Model` combinations via `pricing_engine.api.price`.
+3. Aggregate portfolio values and risk metrics in `market_risk`.
+4. Emit reports and run logs for auditability.
 
-## Core data structures and APIs
+## Products
+Vanilla
+- Spot, forwards, equity swaps.
+- European options, American options.
 
-### Pricing API
-Python-first API with an optional C++/Rust backend for numerics:
-```
-price(product, market_snapshot, model, engine, settings) -> PricingResult
-```
-- `product`: Product subclass with payoff definition.
-- `market_snapshot`: immutable MarketDataSnapshot with curves, vols, dividends.
-- `model`: Model instance with parameters.
-- `engine`: Engine instance (Analytic, PDE, MC, Tree).
-- `settings`: numerical and risk settings, e.g., grids, tolerance, RNG seed.
+Exotics and volatility products
+- Barriers (up/down, in/out), digitals.
+- Asian, lookback, cliquet, corridor options.
+- Variance and volatility swaps.
+- Basket proxy (single-spot approximation).
 
-### Market data
-- **Curves**: `Curve` interface providing `df(t)`, `zero_rate(t)`, `fwd_rate(t1,t2)`.
-- **Dividend term structures**: discrete schedules (ex-div dates + cash amounts), continuous yield curves, or hybrid schedules.
-- **Vol surfaces**: implied vol by (expiry, strike) or (expiry, delta). Arbitrage-checked and smoothly interpolated.
-- **Calendars/Corporate actions**: calendars for business-day conventions; splits and special dividends stored as events and applied to underlying adjustments.
+## Models
+- Black-Scholes (lognormal).
+- Heston stochastic volatility.
+- Merton jump diffusion.
+- Local volatility (placeholder grid).
+- Local-stochastic volatility (LSV) with leverage surface support.
+- Hybrid local-stochastic proxy (placeholder).
 
-### Model registry
-- Model families registered with parameter schemas and calibration requirements.
-- Supports multiple variants and hybrid models (local-stoch with vol-of-vol term structure).
+## Engines and compatibility
+- Analytic:
+  - Black-Scholes European options, digitals, forwards, equity swaps, variance/vol swaps.
+- Tree (CRR):
+  - Black-Scholes European and American options.
+- PDE:
+  - Black-Scholes European options (finite difference).
+  - Barrier options (up/down, in/out) via knock-out PDE and in/out parity when rebate is zero.
+- Monte Carlo:
+  - Black-Scholes and stochastic-vol models (path simulation).
+  - LSM for American options.
+  - Brownian bridge support for barrier monitoring.
 
-### Product abstraction
-Products are immutable definitions of payoffs and exercise features (European, American, Bermudan). Products may declare required market data (e.g., dividends, borrow curve).
+## Greeks
+- Analytic Greeks for Black-Scholes European options.
+- Bump-based Greeks for other products/models (spot/vol/rate).
+- Default mode is auto: analytic when available, bump otherwise.
 
-## Product and model class hierarchy (conceptual)
-```
-Product
-├── Spot
-├── Forward
-├── Swap
-├── Option
-│   ├── EuropeanOption
-│   ├── AmericanOption
-│   └── BermudanOption
-├── BarrierOption (up/down, in/out)
-├── DigitalOption
-├── AsianOption (avg price/strike)
-├── LookbackOption
-├── Cliquet
-├── Corridor
-├── VarianceSwap
-└── VolSwap
+## Calibration
+- Base calibrator scaffold (uses model initial guesses).
+- LSV leverage surface builders:
+  - Direct leverage extraction.
+  - Particle-based leverage calibration (iterative).
 
-Model
-├── BlackScholesModel
-├── LocalVolModel
-├── HestonModel
-├── MertonJumpModel
-└── HybridLocalStochModel
+## Reporting and auditability
+- Standardized JSON/CSV/HTML outputs for pricing and risk runs.
+- Shared `meta` block includes schema version, run id, and generator metadata.
+- Run logs captured in `market_risk/reports/runs/`.
+- See `docs/reporting.md` for schema details.
 
-Engine
-├── AnalyticEngine
-├── TreeEngine
-├── PDEEngine
-└── MonteCarloEngine (incl. QMC)
-```
+## Known limitations
+- Single-asset focus; basket handled as proxy only.
+- Simplified MC and calibration routines intended for education and prototyping.
+- Engine coverage is intentionally limited by product/model compatibility.
 
-## Numerical methods and key algorithms
-
-### Closed-form pricing (where available)
-- Black-Scholes closed forms for European calls/puts, digitals, forwards.
-- Heston Fourier and Merton characteristic function methods for vanilla options.
-
-### Trees
-- Recombining trees for early exercise and discrete dividends.
-- Time step aligned with dividend and corporate action dates.
-
-### PDE/FD
-- Crank-Nicolson or ADI schemes for local volatility and Heston.
-- Fitted boundaries for barrier options.
-
-### Monte Carlo
-- Pathwise simulation for local and stochastic vol; jump diffusion via Poisson jumps.
-- QMC (Sobol) for variance reduction.
-- Longstaff-Schwartz for American style when needed (regression on basis of spot levels).
-- Brownian-bridge adjustment for continuous barrier monitoring between MC time steps.
-- LSV calibration via particle method: simulate SV paths with leverage surface and set
-  `L(t,S)=sigma_loc(t,S)/sqrt(E[v_t|S_t=S])`, with kernel regression for the conditional variance.
-
-## Industry pricing map (typical desk usage)
-- **Spot/Forward/Equity swap**: analytic carry model with OIS discounting and funding/borrow adjustments.
-- **European options**: Black-Scholes closed form; Heston/Merton via Fourier/FFT; local vol via PDE.
-- **American options**: binomial/trinomial trees or PDE; MC + LSM for large dimensional problems.
-- **Barriers**: closed-form (Reiner-Rubinstein) for standard barriers; PDE or MC for complex/monitoring.
-- **Digitals**: closed-form under BS; PDE for local/stoch vol; MC for exotic monitoring.
-- **Asian/Lookback/Cliquet/Corridor**: MC with variance reduction and control variates (geometric Asian).
-- **Variance/Vol swaps**: static replication from option surface (log contract) or MC on log returns.
-  - Variance fair strike: `K_var = (2/T) * exp(rT) * ∫ OTM(K) / K^2 dK` (OTM price is discounted option PV).
-  - Vol swap: use `sqrt(K_var)` with convexity adjustment if vol-of-vol available.
-
-### Reasonable default numerical parameters
-- **MC**: 20k–100k paths, 252 time steps, antithetic variates; fixed seed in deterministic mode.
-- **Tree**: 300–600 steps for American options; dividend dates aligned to nodes.
-- **PDE**: 200–400 spatial points, 200–500 time steps; Crank-Nicolson/implicit.
-
-### Greeks
-- **AAD**: for MC and PDE (adjoint). Highest performance, but more complex setup and memory.
-- **Bump-and-revalue**: robust for any engine, more expensive.
-- **Analytic**: when closed-form formulas exist.
-
-## Calibration pipeline
-
-### Inputs
-- Market quotes: spot, forward curve, option implied vols (by strike/delta), dividends, borrow curve.
-- Constraints: positivity of variance, Feller condition (Heston), monotonicity and convexity of implied vol.
-- Stability: parameter bounds and time smoothing.
-
-### Objective function
-- Weighted least squares on implied vol or price space:
-  - `min sum w_i * (model_iv_i - market_iv_i)^2`
-- Robust penalties for arbitrage violations and parameter extremes.
-
-### Regularization
-- Time smoothing for term-structured parameters.
-- L2 penalty on deviations from prior parameters.
-
-### Stability checks
-- Recalibration with perturbed market data to ensure robustness.
-- Reject if implied vol surface violates no-arb (calendar or butterfly).
-
-### Calibration flow (pseudocode)
-```
-function calibrate(model, market, quotes, settings):
-    params0 = model.initial_guess(market)
-    constraints = model.constraints(market)
-    def objective(params):
-        model.set_params(params)
-        ivs = model.implied_vol_surface(quotes.expiries, quotes.strikes)
-        return weighted_error(ivs, quotes.market_ivs) + regularization(params)
-
-    result = optimizer.minimize(objective, params0, constraints)
-    if not result.converged:
-        return CalibrationResult(status="failed", diagnostics=result.diag)
-
-    if not arb_checks_pass(model, market):
-        return CalibrationResult(status="rejected", diagnostics="arb check fail")
-
-    return CalibrationResult(status="ok", params=result.params, diagnostics=result.diag)
-```
-
-## Key algorithms (pseudocode)
-
-### Monte Carlo pricing (generic payoff)
-```
-function price_mc(product, model, market, settings):
-    rng = RNG(seed=settings.seed)
-    paths = model.simulate_paths(market, settings.timesteps, settings.num_paths, rng)
-    payoffs = [product.payoff(path, market) for path in paths]
-    disc = market.discount_curve.df(product.maturity)
-    price = disc * mean(payoffs)
-    stderr = disc * std(payoffs) / sqrt(num_paths)
-    return PriceWithError(price, stderr)
-```
-
-### PDE pricing (barrier)
-```
-function price_pde_barrier(product, model, market, settings):
-    grid = build_grid(product, model, market, settings)
-    payoff = terminal_payoff(product, grid.S)
-    for t in reversed(grid.time):
-        payoff = pde_step(payoff, t, model, market, grid)
-        payoff = apply_barrier_conditions(payoff, product, grid.S)
-    return interpolate(payoff, S0)
-```
-
-### Tree pricing (American)
-```
-function price_tree_american(product, model, market, settings):
-    tree = build_tree(model, market, settings.steps)
-    values = product.payoff(tree.S[:, -1])
-    for t in reversed(tree.times[:-1]):
-        cont = discount(expectation(values, tree.probs))
-        exc = product.payoff(tree.S[:, t])
-        values = max(cont, exc)
-    return values[0]
-```
-
-## Consistency and arbitrage checks
-- Call spread monotonicity and convexity (butterfly) checks for each expiry.
-- Calendar spread check across maturities.
-- Static no-arb checks on dividend-adjusted forwards.
-
-## System components
-
-### Market data ingestion
-- Data adapters to vendor feeds; normalized to internal schema.
-- Caching keyed by `(asof, source, instrument)`.
-
-### Calibration service
-- Runs scheduled or on-demand calibration for each model.
-- Stores calibrated parameters with metadata (fit error, constraints, timestamps).
-
-### Pricing service
-- Stateless pricing service with caching (keyed by product + model + market snapshot + settings).
-- Concurrency via async requests; heavy numerics offloaded to C++/Rust or separate worker pools.
-
-### Diagnostics and audit
-- Each pricing run records model params, calibration id, numerical settings, and checks.
-
-## Performance and reliability
-- **Latency targets**: single-vanilla <5ms (analytic), <50ms (PDE/tree), <200ms (MC small); batch throughput >10k options/sec.
-- **Deterministic mode**: fixed seeds, consistent grid construction, stable numerical tolerances.
-- **Numerical stability**: adaptive grid or time steps; error bounds for MC and PDE.
-- **Fallbacks**: if calibration fails, use previous day parameters or a simpler model (e.g., Black-Scholes).
-
-## Validation and testing plan
-- **Unit tests**: known analytic formulas (BS, digitals); put-call parity; PDE vs analytic for simple cases.
-- **Regression tests**: market snapshot reprice with known outputs.
-- **Benchmarks**: compare to vendor prices with tolerance thresholds.
-- **Convergence tests**: MC error ~ O(1/sqrt(N)), PDE grid refinement.
-
-## Minimal working skeleton
-See `pricing_engine/` package for module stubs and interfaces.
-
-## Implementation status (current)
-- Pricing API, product/model/engine abstractions, and market data snapshots are implemented in Python.
-- Analytic, tree, and Monte Carlo engines cover core vanilla and select exotic payoffs.
-- Greeks support analytic (European BS) and bump-and-reprice paths.
-- Risk workflows and a static volatility surface demo are available under `market_risk/` and `surface_app/`.
-
-## PM follow-ups / next goals
-- Define MVP product coverage by desk priority (vanilla + barrier + Asian first) and lock acceptance criteria.
-- Specify deterministic-mode expectations for each engine (MC, PDE, tree) and required audit fields.
-- Confirm calibration scope (Heston, local vol, LSV) and required quote inputs per model.
-- Align cache strategy (market snapshot versioning + pricing run cache keys) with audit requirements.
-- Provide performance targets by product family and acceptable error tolerances for regression tests.
-
-## PM plan: goals, success metrics, personas, and roadmap improvements
-
-### Product goals (12-month target state)
-- Deliver a comprehensive equity risk and pricing engine that is audit-ready, reproducible, and supports the full vanilla-to-exotics workflow for front office and risk users.
-- Provide deterministic, explainable pricing and Greeks across analytic, PDE/tree, and MC engines with consistent market data snapshots.
-- Reduce time-to-price for common workflows (vanilla, barrier, Asian, vol/variance swaps) and improve model calibration stability.
-- Enable scalable batch risk (10k+ options/sec) with clear performance SLAs and cost controls.
-
-### Success metrics
-- Pricing accuracy: within desk tolerance vs. vendor for core products (e.g., ≤1bp for vanilla IVs, ≤0.5% PV for exotics).
-- Performance: median latency targets achieved (analytic <5ms, PDE/tree <50ms, MC <200ms) on reference hardware.
-- Calibration stability: >95% of daily calibrations converge without manual intervention; no-arb checks pass >98% of the time.
-- Risk coverage: 90%+ of daily risk run volume covered by deterministic mode with reproducible results.
-- Adoption: at least two desk workflows migrated and used daily with a measurable reduction in manual overrides.
-
-### User personas and workflow value
-- **Front-office quant**: needs rapid model iteration, calibration diagnostics, and validation tooling.
-  - Value: faster prototyping, parameter stability insights, and consistent pricing outputs.
-- **Trader/structurer**: needs real-time pricing, scenario risk, and explainable Greeks.
-  - Value: responsive pricing with clear audit trails and quick sensitivity turnaround.
-- **Risk manager**: needs batch risk and reproducibility for governance and stress testing.
-  - Value: deterministic mode, market snapshot versioning, and transparent audit metadata.
-- **Operations/IT**: needs reliability, monitoring, and deployment simplicity.
-  - Value: defined SLAs, observability, and clear rollback/fallback strategies.
-
-### Documentation and onboarding improvements
-- Add a "Getting Started" guide that walks through a full pricing workflow (market snapshot → calibration → pricing → Greeks → audit record).
-- Provide a sample market data bundle and tutorial notebook for common products (vanilla, barrier, Asian).
-- Document engine selection guidance (analytic vs. PDE/tree vs. MC) with performance/accuracy trade-offs.
-- Add a governance checklist for model sign-off (calibration inputs, diagnostics, no-arb checks, deterministic settings).
-- Create an onboarding checklist for new users (local setup, tests, sample runs, and troubleshooting).
-
-### Roadmap (prioritized)
-1. **MVP coverage and acceptance criteria**: lock product list, input data, and error tolerances for vanilla/barrier/Asian.
-2. **Deterministic mode standardization**: define seeds, grids, and audit schema across engines.
-3. **Calibration hardening**: add stability diagnostics, no-arb reporting, and caching by snapshot/version.
-4. **Risk workflow scale-out**: batch pricing, scenario grids, and AAD for MC and PDE.
-5. **Documentation + onboarding**: ship tutorial datasets, examples, and governance guide.
-
-### Open questions
-- Which products are mandatory for initial production release vs. phase 2?
-- What vendor benchmarks or internal golden prices define acceptance thresholds?
-- Which regulatory audit fields are required for each pricing run?
-- What hardware baseline should define the latency/throughput SLAs?
-- How should model fallback be communicated and approved in production workflows?
+## References
+- `docs/data_inputs_outputs.md`: inputs and validation checks.
+- `docs/success_metrics.md`: accuracy and runtime targets.
+- `docs/reporting.md`: report inventory and schema notes.

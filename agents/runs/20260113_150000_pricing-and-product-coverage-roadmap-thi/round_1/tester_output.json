@@ -1,0 +1,12 @@
+{
+  "failures": [],
+  "new_tests": [],
+  "notes": [],
+  "tests_run": [
+    {
+      "command": "python -m pytest tests/test_reporting.py",
+      "details": "5 passed in 0.37s",
+      "status": "passed"
+    }
+  ]
+}

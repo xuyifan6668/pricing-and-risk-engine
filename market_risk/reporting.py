@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date, datetime
+from dataclasses import asdict, dataclass, is_dataclass
+from datetime import date, datetime, timezone
 import hashlib
 import json
 import os
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional, Sequence
 from uuid import uuid4
+
+
+SCHEMA_VERSION = "1.0"
 
 
 @dataclass(frozen=True)
@@ -37,12 +40,13 @@ class RunLogger:
         outputs: Mapping[str, str],
         notes: str = "",
         version: str = "",
+        run_id: Optional[str] = None,
         started_at: Optional[datetime] = None,
         finished_at: Optional[datetime] = None,
     ) -> str:
-        run_id = str(uuid4())
-        started_at = started_at or datetime.utcnow()
-        finished_at = finished_at or datetime.utcnow()
+        run_id = run_id or str(uuid4())
+        started_at = started_at or _utc_now()
+        finished_at = finished_at or _utc_now()
         run_dir = os.path.join(self.output_root, asof.strftime("%Y%m%d"))
         os.makedirs(run_dir, exist_ok=True)
         record = RunRecord(
@@ -63,6 +67,37 @@ class RunLogger:
         return path
 
 
+def build_report_meta(
+    report_type: str,
+    run_id: str,
+    asof: date,
+    inputs: Mapping[str, Any],
+    generator: str,
+    notes: str = "",
+    assumptions: Sequence[str] = (),
+    model: str = "",
+    engine: str = "",
+) -> Dict[str, Any]:
+    meta = {
+        "schema_version": SCHEMA_VERSION,
+        "report_type": report_type,
+        "run_id": run_id,
+        "asof": asof.isoformat(),
+        "created_at": _utc_now().isoformat(),
+        "generator": generator,
+        "inputs": _safe_json(inputs),
+    }
+    if model:
+        meta["model"] = model
+    if engine:
+        meta["engine"] = engine
+    if assumptions:
+        meta["assumptions"] = list(assumptions)
+    if notes:
+        meta["notes"] = notes
+    return meta
+
+
 def _sha256(path: str) -> str:
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
@@ -71,12 +106,19 @@ def _sha256(path: str) -> str:
     return digest.hexdigest()
 
 
+def _utc_now() -> datetime:
+    tz = getattr(datetime, "UTC", timezone.utc)
+    return datetime.now(tz)
+
+
 def _safe_json(payload: Mapping[str, Any]) -> Dict[str, Any]:
     def _convert(obj: Any) -> Any:
         if isinstance(obj, (str, int, float, bool)) or obj is None:
             return obj
         if isinstance(obj, date):
             return obj.isoformat()
+        if is_dataclass(obj):
+            return _convert(asdict(obj))
         if isinstance(obj, Mapping):
             return {str(k): _convert(v) for k, v in obj.items()}
         if isinstance(obj, (list, tuple)):

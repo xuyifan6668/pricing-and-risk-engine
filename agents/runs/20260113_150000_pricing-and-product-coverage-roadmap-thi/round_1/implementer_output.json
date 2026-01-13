@@ -1,0 +1,17 @@
+===RESULT===
+{
+  "changes": [
+    {"file": "pricing_engine/api.py", "summary": "Capture numeric engine metrics and add 95% CI fields alongside pricing results."},
+    {"file": "pricing_engine/run_pricing_report.py", "summary": "Factor trade result building, include metrics in report payloads, and add stderr/CI columns to CSV/HTML outputs."},
+    {"file": "pricing_engine/reporting.py", "summary": "Bump pricing report schema version to 1.1 for added metrics fields."},
+    {"file": "tests/test_reporting.py", "summary": "Add MC report coverage test to assert stderr/CI metrics and engine settings metadata are propagated."}
+  ],
+  "tests_needed": [],
+  "notes": [
+    "Assumed 95% confidence intervals computed as price +/- 1.96 * stderr.",
+    "Metrics extraction only preserves numeric engine outputs; non-numeric values are ignored.",
+    "Ran `python -m pytest tests/test_reporting.py`."
+  ],
+  "open_questions": []
+}
+===END===

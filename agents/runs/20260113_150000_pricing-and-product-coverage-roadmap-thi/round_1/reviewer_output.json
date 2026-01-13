@@ -1,0 +1,23 @@
+{
+  "approval": "changes_requested",
+  "findings": [
+    {
+      "detail": "Schema version bumped to 1.1 while `market_risk/reporting.py:14` remains 1.0; docs/roadmap call for shared schema versioning, so mixed versions can confuse downstream validators or tooling. Consider centralizing the version or bumping both.",
+      "file": "pricing_engine/reporting.py:19",
+      "severity": "medium"
+    },
+    {
+      "detail": "Metrics extraction only accepts int/float, so numeric types like Decimal or numpy scalars would be silently dropped (including stderr), preventing CI fields. Consider numbers.Real or a safe float() coercion.",
+      "file": "pricing_engine/api.py:67",
+      "severity": "low"
+    },
+    {
+      "detail": "No assertions cover the new stderr/CI columns in CSV/HTML outputs; tests only validate in-memory trade results. Add coverage for report file outputs to avoid regressions.",
+      "file": "tests/test_reporting.py:97",
+      "severity": "low"
+    }
+  ],
+  "notes": [
+    "Tests observed: python -m pytest tests/test_reporting.py (per tester)."
+  ]
+}

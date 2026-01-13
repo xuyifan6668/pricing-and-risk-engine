@@ -18,14 +18,14 @@ from pricing_engine.utils.types import OptionType
 @dataclass(frozen=True)
 class GreekRequest:
     greeks: Iterable[str]
-    method: str = "analytic"
+    method: str = "auto"
     bump_size: float = 1e-4
     vol_bump: float = 1e-4
     rate_bump: float = 1e-4
 
     @staticmethod
     def default() -> "GreekRequest":
-        return GreekRequest(greeks=("delta", "gamma", "vega", "theta", "rho"))
+        return GreekRequest(greeks=("delta", "gamma", "vega", "theta", "rho"), method="auto")
 
 
 class _PricingContext(Protocol):
@@ -38,11 +38,18 @@ class _PricingContext(Protocol):
 
 class GreeksCalculator:
     def calculate(self, context: _PricingContext, request: GreekRequest) -> Dict[str, float]:
+        if request.method == "auto":
+            analytic = self._analytic_greeks(context, request)
+            if analytic:
+                return analytic
+            return self._bump_greeks(context, request)
+        if request.method == "bump":
+            return self._bump_greeks(context, request)
         if request.method != "analytic":
-            if request.method == "bump":
-                return self._bump_greeks(context, request)
             return {}
+        return self._analytic_greeks(context, request)
 
+    def _analytic_greeks(self, context: _PricingContext, request: GreekRequest) -> Dict[str, float]:
         product = context.product
         model = context.model
         market = context.market
@@ -122,10 +129,16 @@ class GreeksCalculator:
 
         if "vega" in request.greeks:
             v_bump = max(request.vol_bump, 1e-8)
-            vu = _shift_vol(market, v_bump)
-            vd = _shift_vol(market, -v_bump)
-            p_vu = engine.price(product, vu, model, settings).get("price", base_price)
-            p_vd = engine.price(product, vd, model, settings).get("price", base_price)
+            if isinstance(model, BlackScholesModel):
+                model_up = BlackScholesModel(sigma=max(model.sigma + v_bump, 1e-8))
+                model_dn = BlackScholesModel(sigma=max(model.sigma - v_bump, 1e-8))
+                p_vu = engine.price(product, market, model_up, settings).get("price", base_price)
+                p_vd = engine.price(product, market, model_dn, settings).get("price", base_price)
+            else:
+                vu = _shift_vol(market, v_bump)
+                vd = _shift_vol(market, -v_bump)
+                p_vu = engine.price(product, vu, model, settings).get("price", base_price)
+                p_vd = engine.price(product, vd, model, settings).get("price", base_price)
             results["vega"] = (p_vu - p_vd) / (2.0 * v_bump)
 
         if "rho" in request.greeks:

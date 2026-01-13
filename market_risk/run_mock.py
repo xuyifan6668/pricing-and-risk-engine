@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 import os
 import sys
 
@@ -18,7 +19,7 @@ from market_risk.frtb import RTPLCapitalCalculator
 from market_risk.pla import PLATester
 from market_risk.rniv import RNIVConfig, rniv_addon
 from market_risk.rtpl import GridRTPLConfig, compute_rtpl_series_grid
-from market_risk.reporting import RunLogger
+from market_risk.reporting import RunLogger, SCHEMA_VERSION, build_report_meta
 from market_risk.scenarios import HistoricalScenarioBuilder, default_tenor_grid
 from market_risk.grid_config import DEFAULT_GRID_CONFIG_PATH, load_grid_config
 
@@ -130,8 +131,18 @@ def main() -> None:
         print(f"RTPL vs HPL daily PnL diff: mean={mean_diff:,.2f}, max={max_diff:,.2f}")
     print("Performance summary:", monitor.summary())
 
-    report_path = write_mock_report(
+    run_id = build_run_id()
+    report_inputs = {
+        "fast": args.fast,
+        "portfolio_positions": len(portfolio.positions),
+        "scenarios": len(scenarios.scenarios),
+        "grid_config": asdict(grid_config),
+        "history_days": len(history),
+    }
+    report_paths = write_mock_report(
         base_market.asof,
+        run_id=run_id,
+        inputs=report_inputs,
         report=report,
         backtest=backtest,
         pla=pla,
@@ -143,20 +154,20 @@ def main() -> None:
         rniv=rniv,
         capital_with_rniv=capital_with_rniv,
     )
+    print(f"JSON report: {report_paths['json_report']}")
+    print(f"CSV report: {report_paths['csv_report']}")
+    if "html_report" in report_paths:
+        print(f"HTML report: {report_paths['html_report']}")
 
     logger = RunLogger()
     log_path = logger.log_run(
         name="mock_ima",
         asof=base_market.asof,
-        params={
-            "fast": args.fast,
-            "portfolio_positions": len(portfolio.positions),
-            "scenarios": len(scenarios.scenarios),
-            "grid_config": grid_config.__dict__,
-            "history_days": len(history),
-        },
-        outputs={"report": report_path},
+        params=report_inputs,
+        outputs=report_paths,
         notes="mock IMA run with RTPL and grid sensitivities",
+        version=SCHEMA_VERSION,
+        run_id=run_id,
     )
     print(f"Run log: {log_path}")
 
@@ -210,8 +221,16 @@ def latest_grid() -> dict | None:
     return load_grid_config(DEFAULT_GRID_CONFIG_PATH)
 
 
+def build_run_id() -> str:
+    from uuid import uuid4
+
+    return str(uuid4())
+
+
 def write_mock_report(
     asof,
+    run_id: str,
+    inputs: dict,
     report,
     backtest,
     pla,
@@ -222,12 +241,13 @@ def write_mock_report(
     rtpl_capital_error: float,
     rniv: float,
     capital_with_rniv: float,
-) -> str:
+    output_dir: str = "market_risk/reports",
+) -> dict:
     import json
     import os
+    import csv
 
-    payload = {
-        "asof": asof.isoformat(),
+    summary = {
         "var": report.var_result.value,
         "es": report.es_result.value,
         "ima_capital": report.ima_capital.total_es,
@@ -239,14 +259,120 @@ def write_mock_report(
         "rtpl_capital_error": rtpl_capital_error,
         "rniv": rniv,
         "capital_with_rniv": capital_with_rniv,
-        "backtest": backtest.__dict__,
-        "pla": pla.__dict__,
     }
-    os.makedirs("market_risk/reports", exist_ok=True)
-    path = os.path.join("market_risk/reports", f"ima_report_{asof.strftime('%Y%m%d')}.json")
-    with open(path, "w", encoding="utf-8") as handle:
+    payload = {
+        "meta": build_report_meta(
+            report_type="risk.ima",
+            run_id=run_id,
+            asof=asof,
+            inputs=inputs,
+            generator="market_risk/run_mock.py",
+            engine="MarketRiskEngine",
+            assumptions=(
+                "Synthetic history and portfolio generated from market_risk/mock_data.py.",
+                "Historical scenarios use 1-day horizon and tenor grid defaults.",
+                "RTPL grid sensitivities use configured spot/vol/dividend/rate shifts.",
+            ),
+        ),
+        "summary": summary,
+        "checks": {"backtest": backtest.__dict__, "pla": pla.__dict__},
+        "details": {
+            "rtpl_error": rtpl_error,
+            "rtpl_capital_error": rtpl_capital_error,
+            "rniv": rniv,
+        },
+    }
+    os.makedirs(output_dir, exist_ok=True)
+    stamp = asof.strftime("%Y%m%d")
+    json_path = os.path.join(output_dir, f"ima_report_{stamp}.json")
+    csv_path = os.path.join(output_dir, f"ima_report_{stamp}.csv")
+    html_path = os.path.join(output_dir, f"ima_report_{stamp}.html")
+    with open(json_path, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2)
-    return path
+    with open(html_path, "w", encoding="utf-8") as handle:
+        handle.write(render_ima_report_html(payload))
+    with open(csv_path, "w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["metric", "value"])
+        writer.writerow(["run_id", run_id])
+        writer.writerow(["asof", asof.isoformat()])
+        for key, value in summary.items():
+            writer.writerow([key, value])
+        writer.writerow(["backtest_traffic_light", backtest.traffic_light])
+        writer.writerow(["backtest_exceptions", backtest.exceptions])
+        writer.writerow(["pla_status", pla.status])
+        writer.writerow(["pla_correlation", pla.correlation])
+        writer.writerow(["pla_std_ratio", pla.std_ratio])
+        writer.writerow(["pla_beta", pla.beta])
+        writer.writerow(["pla_r2", pla.r2])
+        writer.writerow(["pla_rmse", pla.rmse])
+        writer.writerow(["pla_explained_ratio", pla.explained_ratio])
+    return {"json_report": json_path, "csv_report": csv_path, "html_report": html_path}
+
+
+def render_ima_report_html(payload: dict) -> str:
+    meta = payload.get("meta", {})
+    summary = payload.get("summary", {})
+    checks = payload.get("checks", {})
+    backtest = checks.get("backtest", {})
+    pla = checks.get("pla", {})
+
+    def fmt(val: object, digits: int = 4) -> str:
+        if val is None:
+            return ""
+        if isinstance(val, float):
+            return f"{val:,.{digits}f}"
+        return str(val)
+
+    summary_rows = "".join(
+        f"<tr><td>{key}</td><td>{fmt(value, 6)}</td></tr>" for key, value in summary.items()
+    )
+    backtest_rows = "".join(
+        f"<tr><td>{key}</td><td>{fmt(value, 6)}</td></tr>" for key, value in backtest.items()
+    )
+    pla_rows = "".join(f"<tr><td>{key}</td><td>{fmt(value, 6)}</td></tr>" for key, value in pla.items())
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>IMA Risk Report</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; padding: 24px; background: #f5f3ef; color: #1f1f1f; }}
+    h1 {{ margin-top: 0; }}
+    table {{ border-collapse: collapse; width: 100%; background: #fff; margin-bottom: 20px; }}
+    th, td {{ border: 1px solid #d7d0c5; padding: 6px 8px; font-size: 13px; text-align: left; }}
+    th {{ background: #ece7df; }}
+    .meta {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px; }}
+    .meta-item {{ background: #fff; border: 1px solid #d7d0c5; padding: 8px; font-size: 13px; }}
+  </style>
+</head>
+<body>
+  <h1>Mock IMA Risk Report</h1>
+  <div class="meta">
+    <div class="meta-item">Run ID: {meta.get("run_id", "")}</div>
+    <div class="meta-item">As-of: {meta.get("asof", "")}</div>
+    <div class="meta-item">Created: {meta.get("created_at", "")}</div>
+    <div class="meta-item">Generator: {meta.get("generator", "")}</div>
+  </div>
+  <h2>Summary</h2>
+  <table>
+    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+    <tbody>{summary_rows}</tbody>
+  </table>
+  <h2>Backtest</h2>
+  <table>
+    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+    <tbody>{backtest_rows}</tbody>
+  </table>
+  <h2>PLA</h2>
+  <table>
+    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+    <tbody>{pla_rows}</tbody>
+  </table>
+</body>
+</html>
+"""
 
 
 if __name__ == "__main__":

@@ -35,6 +35,7 @@ class PricingContext:
 class PricingResult:
     price: float
     greeks: Dict[str, float]
+    metrics: Dict[str, float]
     diagnostics: Dict[str, str]
     run_id: str
 
@@ -61,6 +62,20 @@ def price(
     price_value = raw.get("price")
     if price_value is None:
         raise ValueError("engine returned no price")
+    price_value = float(price_value)
+
+    metrics: Dict[str, float] = {}
+    for key, value in raw.items():
+        if key == "price":
+            continue
+        if isinstance(value, (int, float)):
+            metrics[key] = float(value)
+    stderr = metrics.get("stderr")
+    if stderr is not None and stderr >= 0.0:
+        z_score = 1.96
+        metrics["ci_level"] = 0.95
+        metrics["ci_lower"] = price_value - z_score * stderr
+        metrics["ci_upper"] = price_value + z_score * stderr
 
     greeks: Dict[str, float] = {}
     if settings.compute_greeks:
@@ -79,6 +94,7 @@ def price(
     return PricingResult(
         price=price_value,
         greeks=greeks,
+        metrics=metrics,
         diagnostics=diagnostics,
         run_id=context.run_id,
     )

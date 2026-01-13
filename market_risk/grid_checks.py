@@ -8,7 +8,7 @@ import json
 import math
 import os
 import random
-from typing import List, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from pricing_engine.market_data.snapshot import MarketDataSnapshot
 from pricing_engine.market_data.dividends import DividendSchedule
@@ -925,7 +925,11 @@ def _add_midpoint(
 
 
 
-def write_report(result: GridCheckResult, config: GridCheckConfig) -> Tuple[str, str]:
+def write_report(
+    result: GridCheckResult,
+    config: GridCheckConfig,
+    meta: Optional[dict] = None,
+) -> Tuple[str, str]:
     os.makedirs(config.output_dir, exist_ok=True)
     stamp = result.summary.asof.strftime("%Y%m%d")
     json_path = os.path.join(config.output_dir, f"grid_check_{stamp}.json")
@@ -937,6 +941,7 @@ def write_report(result: GridCheckResult, config: GridCheckConfig) -> Tuple[str,
     with open(json_path, "w", encoding="utf-8") as handle:
         json.dump(
             {
+                "meta": meta or {},
                 "summary": summary_payload,
                 "delta_error": result.delta_error_map.values,
                 "gamma_error": result.gamma_error_map.values,

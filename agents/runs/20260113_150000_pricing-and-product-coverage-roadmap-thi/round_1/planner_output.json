@@ -1,0 +1,47 @@
+===RESULT===
+{
+  "plan": [
+    "Define MC diagnostics schema (stderr, confidence intervals, config) and propagate from `pricing_engine/numerics/monte_carlo.py` through `pricing_engine/api.py` into `pricing_engine/run_pricing_report.py`, plus update `pricing_engine/reporting.py` and `tests/test_reporting.py`.",
+    "Create path-dependent regression tests for Asian, lookback, cliquet, and corridor in `tests/` using `market_scenarios` fixtures and deterministic seeds, with benchmark values stored under `tests/benchmarks/`.",
+    "Implement a convergence sweep runner (e.g., `pricing_engine/run_convergence_sweep.py`) that varies paths/seeds and emits JSON/CSV/HTML reports to `pricing_engine/reports/`, reusing `pricing_engine/reporting.py` meta helpers.",
+    "Add corridor variance swap support by extending products in `pricing_engine/products/exotics.py` and pricing logic (surface integration in `pricing_engine/market_data/surfaces.py` plus MC fallback in `pricing_engine/numerics/monte_carlo.py`), with unit tests.",
+    "Add variance/vol swap parity tests (analytic vs MC) in `tests/` and wire into existing scenarios to meet Phase 4 acceptance criteria.",
+    "Add calibration stability checks and diagnostics persistence in `pricing_engine/calibration/` (bounds, fit stats, seeds), plus tests and report metadata.",
+    "Implement local vol bootstrapping with arbitrage checks in `pricing_engine/market_data/` (or `pricing_engine/calibration/`) and add tests for positivity/monotonicity.",
+    "Add Heston/Merton smile calibration routines in `pricing_engine/calibration/` and tests against `docs/success_metrics.md` thresholds.",
+    "Document model/engine compatibility matrix updates in `docs/spec.md` and link the new tests/scripts in `docs/roadmap.md`."
+  ],
+  "improvements": [
+    "Link each roadmap deliverable to a specific test or report artifact (test name + script path) to make status updates objective.",
+    "Add a small `tests/benchmarks/` dataset with a rebaseline script to keep regression values auditable and reproducible.",
+    "Expand `docs/reporting.md` to include MC diagnostics fields and a convergence sweep report type for schema consistency.",
+    "Split stochastic tests into deterministic vs statistical buckets to avoid flaky CI while still validating convergence behavior.",
+    "Add lightweight performance timing in pricing runs to track runtime targets from `docs/success_metrics.md`."
+  ],
+  "acceptance_criteria": [
+    "Pricing reports include MC `stderr`, confidence interval fields, and engine settings metadata for MC trades, validated by updated tests in `tests/test_reporting.py`.",
+    "Path-dependent regression tests for Asian, lookback, cliquet, and corridor pass within 2-5% of benchmark values using deterministic seeds.",
+    "Convergence sweep reports show stderr scaling ~1/sqrt(N) across at least three path counts and variance reduction improves stderr by >= 25% at fixed paths.",
+    "Corridor variance swap fair strikes from surface integration match MC within 2-3% for BS scenarios and respect corridor bounds.",
+    "Variance/vol swap parity tests (analytic vs MC) pass within 2-3% under BS for multiple market scenarios.",
+    "Calibration diagnostics (bounds checks, fit errors, seeds) are persisted and meet thresholds from `docs/success_metrics.md`.",
+    "Scenario pricing artifacts follow `docs/reporting.md` meta schema and are written to the expected report directories.",
+    "Runtime targets in `docs/success_metrics.md` remain satisfied for the sample pricing and mock risk workflows after changes."
+  ],
+  "risks": [
+    "Limited analytic benchmarks for path-dependent products could make regression targets subjective or unstable.",
+    "Monte Carlo-based tests may be flaky without strict seeding and tolerances, causing CI noise.",
+    "Corridor variance swap integration depends on surface quality and may require careful extrapolation rules.",
+    "Calibration routines can be ill-conditioned; added bounds may cause convergence failures without good initial guesses.",
+    "Reporting schema changes may break downstream consumers if not versioned and documented."
+  ],
+  "questions": [
+    "Which Phase 3/4 items are highest priority for the next iteration (path-dependent tests, MC metadata, or convergence sweep)?",
+    "Do you have preferred benchmark sources/values for Asian, lookback, cliquet, and corridor regression tests?",
+    "Should MC diagnostics be stored at the trade result level, the report meta level, or both?",
+    "What path/seed grid should the convergence sweep use (paths list, seed list, runtime budget)?",
+    "For corridor variance swaps, do you prefer a new product type or extending `VarianceSwap` with corridor bounds?",
+    "What calibration accuracy targets should we apply for Heston/Merton (use `docs/success_metrics.md` as-is or tighter/looser)?"
+  ]
+}
+===END===

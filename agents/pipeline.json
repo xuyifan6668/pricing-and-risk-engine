@@ -1,0 +1,13 @@
+{
+  "max_rounds": 0,
+  "command_template": "python agents/run_codex_agent.py --agent-file {agent_file} --input {input_file} --output {output_file} --role {agent}",
+  "status_keys": ["status", "decision", "result"],
+  "pass_values": ["pass", "approved", "yes", "true"],
+  "agents": [
+    {"name": "planner", "file": "agents/planner.md"},
+    {"name": "implementer", "file": "agents/implementer.md"},
+    {"name": "tester", "file": "agents/tester.md"},
+    {"name": "reviewer", "file": "agents/reviewer.md"},
+    {"name": "manager", "file": "agents/manager.md"}
+  ]
+}
