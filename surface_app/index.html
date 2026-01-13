@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Vol Surface Calibration Studio</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Equity Volatility Lab</p>
+          <h1>Vol Surface Calibration Studio</h1>
+          <p class="subtitle">Fit a smile per expiry, blend across tenors, and visualize market points against a live surface.</p>
+        </div>
+        <div class="hero-card">
+          <div>
+            <div class="metric">RMS Error</div>
+            <div class="metric-value" id="rmsError">0.0000</div>
+          </div>
+          <div>
+            <div class="metric">Quotes Loaded</div>
+            <div class="metric-value" id="quoteCount">0</div>
+          </div>
+          <div>
+            <div class="metric">Surface Nodes</div>
+            <div class="metric-value" id="nodeCount">0</div>
+          </div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel controls">
+          <h2>Market Inputs</h2>
+          <div class="grid">
+            <label>
+              <span>Spot</span>
+              <input type="number" id="spot" value="102" step="0.1" />
+            </label>
+            <label>
+              <span>Risk-Free Rate</span>
+              <input type="number" id="rate" value="0.02" step="0.0005" />
+            </label>
+            <label>
+              <span>Dividend Yield</span>
+              <input type="number" id="dividend" value="0.005" step="0.0005" />
+            </label>
+            <label>
+              <span>Borrow Cost</span>
+              <input type="number" id="borrow" value="0.004" step="0.0005" />
+            </label>
+          </div>
+
+          <h3>Calibration Options</h3>
+          <div class="grid">
+            <label>
+              <span>Noise (bp)</span>
+              <input type="range" id="noise" min="0" max="50" value="12" />
+            </label>
+            <label>
+              <span>Smoothing</span>
+              <input type="range" id="smooth" min="0" max="1" value="0.35" step="0.05" />
+            </label>
+            <label>
+              <span>Strike Grid</span>
+              <input type="range" id="strikeCount" min="10" max="40" value="26" />
+            </label>
+            <label>
+              <span>Expiry Grid</span>
+              <input type="range" id="expiryCount" min="5" max="16" value="10" />
+            </label>
+          </div>
+
+          <div class="actions">
+            <button id="calibrate">Calibrate Surface</button>
+            <button class="ghost" id="regen">Regenerate Quotes</button>
+          </div>
+
+          <h3>Market Quotes (JSON)</h3>
+          <textarea id="quoteInput" rows="12"></textarea>
+          <div class="helper">Format: [{"expiry":1.0,"strike":100,"iv":0.2}, ...]</div>
+        </section>
+
+        <section class="panel viz">
+          <div class="viz-header">
+            <h2>Surface View</h2>
+            <div class="toggles">
+              <label><input type="checkbox" id="showSurface" checked /> Surface</label>
+              <label><input type="checkbox" id="showWire" checked /> Wireframe</label>
+              <label><input type="checkbox" id="showPoints" checked /> Points</label>
+            </div>
+          </div>
+          <canvas id="surfaceCanvas" width="960" height="540"></canvas>
+          <div class="view-controls">
+            <label>Rotate X <input type="range" id="rotX" min="-1.2" max="0.2" step="0.01" value="-0.65" /></label>
+            <label>Rotate Y <input type="range" id="rotY" min="-1.2" max="1.2" step="0.01" value="0.75" /></label>
+            <label>Zoom <input type="range" id="zoom" min="0.6" max="1.6" step="0.02" value="1.05" /></label>
+          </div>
+          <div class="legend">
+            <div class="swatch"></div>
+            <span>Low vol to high vol</span>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
