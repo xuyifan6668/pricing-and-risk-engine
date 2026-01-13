@@ -96,6 +96,27 @@ def test_mc_barrier_continuous_below_discrete():
     assert price_cont <= price_discrete + 1e-6
 
 
+def test_mc_barrier_deterministic_seed():
+    market = _market("volatile")
+    maturity = market.asof + timedelta(days=180)
+    product = BarrierOption(
+        underlying=Underlying("XYZ"),
+        currency="USD",
+        maturity=maturity,
+        strike=100.0,
+        barrier=105.0,
+        barrier_type=BarrierType.UP_OUT,
+        option_type=OptionType.CALL,
+    )
+    model = BlackScholesModel(sigma=0.2)
+    engine = MonteCarloEngine(num_paths=2000, timesteps=50, use_brownian_bridge=True)
+    settings = EngineSettings(seed=123, deterministic=True)
+
+    price1 = engine.price(product, market, model, settings)["price"]
+    price2 = engine.price(product, market, model, settings)["price"]
+    assert price1 == pytest.approx(price2)
+
+
 @pytest.mark.parametrize("scenario", list(SCENARIOS.keys()))
 def test_analytic_variance_swap_fair_strike(scenario):
     market = _market(scenario)

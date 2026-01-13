@@ -250,3 +250,33 @@ function price_tree_american(product, model, market, settings):
 
 ## Minimal working skeleton
 See `pricing_engine/` package for module stubs and interfaces.
+
+## Implementation status (current)
+- Pricing API, product/model/engine abstractions, and market data snapshots are implemented in Python.
+- Analytic, tree, and Monte Carlo engines cover core vanilla and select exotic payoffs.
+- Greeks support analytic (European BS) and bump-and-reprice paths.
+- Risk workflows and a static volatility surface demo are available under `market_risk/` and `surface_app/`.
+
+## PM follow-ups / next goals
+- Define MVP product coverage by desk priority (vanilla + barrier + Asian first) and lock acceptance criteria.
+- Specify deterministic-mode expectations for each engine (MC, PDE, tree) and required audit fields.
+- Confirm calibration scope (Heston, local vol, LSV) and required quote inputs per model.
+- Align cache strategy (market snapshot versioning + pricing run cache keys) with audit requirements.
+- Provide performance targets by product family and acceptable error tolerances for regression tests.
+
+## PM summary (roadmap + plan)
+- **Phase 0: Definition & governance**
+  - Finalize MVP product list and acceptance criteria with trading/risk stakeholders.
+  - Lock deterministic-mode expectations (seed rules, audit metadata, reproducibility).
+  - Define calibration coverage and data dependencies per model family.
+- **Phase 1: Core pricing readiness**
+  - Harden analytic + tree pricing for vanilla and barrier products.
+  - Confirm Monte Carlo determinism requirements and add regression baselines.
+  - Establish market snapshot versioning + pricing cache keys for audit trails.
+- **Phase 2: Calibration & risk integration**
+  - Implement/extend calibration services with persistence + diagnostics.
+  - Define benchmark suites (vendor parity, convergence, regression outputs).
+  - Integrate risk sensitivities and scenario workflows with pricing outputs.
+- **Phase 3: Performance & productionization**
+  - Set latency/throughput SLOs by product family and validate.
+  - Add monitoring/audit dashboards and release governance gates.

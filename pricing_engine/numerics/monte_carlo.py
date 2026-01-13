@@ -50,6 +50,7 @@ class MonteCarloEngine(Engine):
         model: BlackScholesModel,
         horizon: float,
         settings: EngineSettings,
+        rng: random.Random,
     ) -> Sequence[Sequence[float]]:
         steps = max(self.timesteps, 1)
         dt = max(horizon, 0.0) / steps
@@ -57,7 +58,7 @@ class MonteCarloEngine(Engine):
         q = market.dividends.yield_rate(max(horizon, 0.0))
         b = market.borrow_curve.zero_rate(max(horizon, 0.0))
         drift = (r - q - b - 0.5 * model.sigma * model.sigma) * dt
-        normals = self._normal_matrix(self.num_paths, steps, settings.seed)
+        normals = self._normal_matrix(self.num_paths, steps, settings.seed, rng)
         paths = []
         for row in normals:
             spot = market.spot
@@ -68,7 +69,15 @@ class MonteCarloEngine(Engine):
             paths.append(path)
         return paths
 
-    def _barrier_hit(self, path: Iterable[float], barrier: float, barrier_type: BarrierType, sigma: float, dt: float) -> bool:
+    def _barrier_hit(
+        self,
+        path: Iterable[float],
+        barrier: float,
+        barrier_type: BarrierType,
+        sigma: float,
+        dt: float,
+        rng: random.Random,
+    ) -> bool:
         if dt <= 0.0 or sigma <= 0.0 or self.barrier_monitoring == "discrete" or not self.use_brownian_bridge:
             if barrier_type in (BarrierType.UP_IN, BarrierType.UP_OUT):
                 return any(s >= barrier for s in path)
@@ -86,7 +95,7 @@ class MonteCarloEngine(Engine):
                 log_ratio0 = math.log(barrier / s0)
                 log_ratio1 = math.log(barrier / s1)
                 prob = math.exp(-2.0 * log_ratio0 * log_ratio1 / (sigma * sigma * dt))
-                if random.random() < prob:
+                if rng.random() < prob:
                     return True
             return False
 
@@ -100,17 +109,22 @@ class MonteCarloEngine(Engine):
             log_ratio0 = math.log(s0 / barrier)
             log_ratio1 = math.log(s1 / barrier)
             prob = math.exp(-2.0 * log_ratio0 * log_ratio1 / (sigma * sigma * dt))
-            if random.random() < prob:
+            if rng.random() < prob:
                 return True
         return False
 
-    def _normal_matrix(self, num_paths: int, steps: int, seed: int | None) -> List[List[float]]:
+    def _normal_matrix(
+        self,
+        num_paths: int,
+        steps: int,
+        seed: int | None,
+        rng: random.Random,
+    ) -> List[List[float]]:
         total_paths = max(num_paths, 1)
         base_paths = (total_paths + 1) // 2 if self.use_antithetic else total_paths
         if self.random_mode == "halton":
             normals = self._halton_normals(base_paths, steps, seed)
         elif self.random_mode == "pseudo":
-            rng = random.Random(seed)
             normals = [[rng.gauss(0.0, 1.0) for _ in range(steps)] for _ in range(base_paths)]
         else:
             raise ValueError(f"Unsupported random_mode: {self.random_mode}")
@@ -314,16 +328,18 @@ class MonteCarloEngine(Engine):
         model: Model,
         settings: EngineSettings,
     ) -> Dict[str, float]:
+        seed = settings.seed if settings.seed is not None else (0 if settings.deterministic else None)
+        rng = random.Random(seed)
         horizon = market.time_to(product.maturity)
         if isinstance(model, BlackScholesModel):
-            paths = self._simulate_bs_paths(market, model, horizon, settings)
+            paths = self._simulate_bs_paths(market, model, horizon, settings, rng)
         else:
             paths = model.simulate_paths(
                 market=market,
                 timesteps=self.timesteps,
                 num_paths=self.num_paths,
                 horizon=horizon,
-                seed=settings.seed,
+                seed=seed,
             )
         if isinstance(product, AmericanOption):
             r = market.discount_curve.zero_rate(max(horizon, 0.0))
@@ -358,7 +374,7 @@ class MonteCarloEngine(Engine):
                 payoffs.append(product.notional * (realized_vol - product.strike))
                 continue
             if isinstance(product, BarrierOption):
-                hit = self._barrier_hit(path, product.barrier, product.barrier_type, sigma, dt)
+                hit = self._barrier_hit(path, product.barrier, product.barrier_type, sigma, dt, rng)
                 is_in = product.barrier_type in (BarrierType.UP_IN, BarrierType.DOWN_IN)
                 active = hit if is_in else not hit
                 if not active:
