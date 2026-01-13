@@ -57,3 +57,16 @@ Then open `http://localhost:8000` in a browser.
 ## Notes
 - Mock data comes from `market_risk/mock_data.py` and `tests/market_scenarios.py`.
 - For architecture details, see `docs/spec.md`.
+
+## Product plan (goals + improvements)
+### Goals
+- Deliver a cohesive pricing + market risk workflow that supports equity derivatives pricing, market risk aggregation, and scenario analytics end-to-end.
+- Make results explainable and auditable with transparent inputs, calibration outputs, and reporting artifacts.
+- Provide a clear learning/onboarding path for quants, risk analysts, and engineers to run demos and extend models.
+
+### Improvements needed
+- Define success metrics for pricing accuracy, risk explainability, and workflow runtime/latency.
+- Add persona-driven onboarding docs (pricing analyst, market risk analyst, engineer) with role-based quickstarts.
+- Expand documentation for data inputs/outputs, model assumptions, and validation checks (PLA, backtesting, sensitivity sanity tests).
+- Introduce standardized reporting artifacts (CSV/JSON + HTML summaries) for pricing runs and risk runs.
+- Add automation guidance (CI, reproducibility, environment setup) for consistent local and pipeline execution.
